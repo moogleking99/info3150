@@ -1,17 +1,13 @@
-# Use OpenJDK as the base image
 FROM openjdk:17-jdk-slim
 
-# Set the working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the project files
-COPY . .
+# Copy the compiled Uber JAR from the 'target' folder into the container
+COPY target/info3150-1.0-SNAPSHOT-shaded.jar app.jar
 
-# Build the project using Maven
-RUN apt-get update && apt-get install -y maven && mvn clean package
-
-# Expose the port Render expects (8080)
+# Expose the application port (Render usually expects 8080)
 EXPOSE 8080
 
-# Run the application
-CMD ["java", "-cp", "target/info3150-1.0-SNAPSHOT.jar", "Main"]
+# Run the Uber JAR
+CMD ["java", "-jar", "app.jar"]
