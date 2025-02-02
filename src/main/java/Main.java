@@ -1,5 +1,6 @@
 import static spark.Spark.*;
 import com.google.gson.Gson;
+import org.mindrot.jbcrypt.BCrypt;
 import java.sql.*;
 
 public class Main {
@@ -14,10 +15,17 @@ public class Main {
             res.type("application/json");
             User user = gson.fromJson(req.body(), User.class);
 
+            if (user.username == null || user.password == null) {
+                res.status(400); // Bad Request
+                return gson.toJson(new ResponseMessage("Username and password are required."));
+            }
+
             if (registerUser(user.username, user.password)) {
-                return "Registration successful!";
+                res.status(201); // Created
+                return gson.toJson(new ResponseMessage("Registration successful!"));
             } else {
-                return "Username already exists.";
+                res.status(409); // Conflict
+                return gson.toJson(new ResponseMessage("Username already exists."));
             }
         });
 
@@ -26,9 +34,11 @@ public class Main {
             User user = gson.fromJson(req.body(), User.class);
 
             if (authenticateUser(user.username, user.password)) {
-                return "Login successful!";
+                res.status(200); // OK
+                return gson.toJson(new ResponseMessage("Login successful!"));
             } else {
-                return "Invalid credentials.";
+                res.status(401); // Unauthorized
+                return gson.toJson(new ResponseMessage("Invalid credentials."));
             }
         });
     }
@@ -36,6 +46,13 @@ public class Main {
     static class User {
         String username;
         String password;
+    }
+
+    static class ResponseMessage {
+        String message;
+        ResponseMessage(String message) {
+            this.message = message;
+        }
     }
 
     private static void initializeDatabase() {
@@ -52,10 +69,11 @@ public class Main {
     }
 
     private static boolean registerUser(String username, String password) {
+        String hashedPassword = BCrypt.hashpw(password, BCrypt.gensalt());
         try (Connection conn = DriverManager.getConnection(DB_URL);
              PreparedStatement pstmt = conn.prepareStatement("INSERT INTO users(username, password) VALUES (?, ?)")) {
             pstmt.setString(1, username);
-            pstmt.setString(2, password);
+            pstmt.setString(2, hashedPassword);
             pstmt.executeUpdate();
             return true;
         } catch (SQLException e) {
@@ -65,14 +83,20 @@ public class Main {
 
     private static boolean authenticateUser(String username, String password) {
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             PreparedStatement pstmt = conn.prepareStatement("SELECT * FROM users WHERE username = ? AND password = ?")) {
+             PreparedStatement pstmt = conn.prepareStatement("SELECT password FROM users WHERE username = ?")) {
             pstmt.setString(1, username);
-            pstmt.setString(2, password);
             ResultSet rs = pstmt.executeQuery();
-            return rs.next();
+
+            if (rs.next()) {
+                String storedHashedPassword = rs.getString("password");
+                return BCrypt.checkpw(password, storedHashedPassword);
+            } else {
+                return false;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
         }
     }
 }
+
