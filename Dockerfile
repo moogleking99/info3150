@@ -1,13 +1,26 @@
-FROM openjdk:17-jdk-slim
+FROM maven:3.8.5-openjdk-17-slim AS build
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy the compiled Uber JAR from the 'target' folder into the container
-COPY target/info3150-1.0-SNAPSHOT-shaded.jar app.jar
+# Copy the Maven project files
+COPY pom.xml .
+COPY src ./src
 
-# Expose the application port (Render usually expects 8080)
+# Build the Uber JAR inside the container
+RUN mvn clean package -DskipTests
+
+# ---- Production Stage ----
+FROM openjdk:17-jdk-slim
+
+WORKDIR /app
+
+# Copy the built JAR from the previous build stage
+COPY --from=build /app/target/info3150-1.0-SNAPSHOT-shaded.jar app.jar
+
+# Expose the application port
 EXPOSE 8080
 
-# Run the Uber JAR
+# Run the application
 CMD ["java", "-jar", "app.jar"]
+
